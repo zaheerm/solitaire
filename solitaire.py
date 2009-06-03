@@ -1,172 +1,215 @@
 #!/usr/bin/python
 import copy
 
-class Marble:
-    def __init__(self, x, y):
+class BoardPosition:
+    def __init__(self, x, y, covered):
         self.x = x
         self.y = y
+        self.covered = covered
+        self.left = None
+        self.right = None
+        self.up = None
+        self.down = None
 
     def __repr__(self):
-        return "M: %d,%d" % (self.x, self.y)
+        covered = "o"
+        if self.covered:
+            covered = "*"
+        return "%s: (%d, %d)" % (covered, self.x, self.y)
 
-class Move:
-    def __init__(self, a, b):
-        self.a = a
-        self.b = b
+class AbstractBoard:
+    positions = [] # array of all board positions
+    spaces = [] # array of spaces
+    indexed_positions = {} # positions indexed by (x,y)
+    height = 0
+    width = 0
 
-    def __repr__(self):
-        return "%r - %r" % (self.a, self.b)
-
-class Board:
-    blanks = [ (0, 0), (0, 1), (0, 5), (0, 6), (1, 0), (1, 6), (5, 0), (5, 6),\
-        (6, 0), (6, 1), (6, 5), (6, 6)]
-
-    def __init__(self):
-        self.board = {}
-        for i in range(0,7):
-            self.board[i] = {}
-            for j in range(0,7):
-                if (i,j) in self.blanks:
-                    self.board[i][j] = None
-                else:
-                    self.board[i][j] = Marble(i, j)
+    def __init__(self, width, height):
+        self.width = width
+        self.height = height
 
     def remove_marble(self, (x, y)):
-        self.board[x][y] = 0
+        pos = self.indexed_positions.get((x,y))
+        self.remove_marble_pos(pos)
+
+    def remove_marble_pos(self, pos):
+        if pos and pos.covered:
+            self.spaces.append(pos)
+            pos.covered = False
 
     def add_marble(self, (x, y)):
-        self.board[x][y] = Marble(x, y)
+        pos = self.indexed_positions.get((x,y))
+        self.add_marble_pos(pos)
+
+    def add_marble_pos(self, pos):
+        if pos and not pos.covered:
+            self.spaces.remove(pos)
+            pos.covered = True
 
     def has_marble(self, (x, y)):
-        return self.board[x][y] is not None and self.board[x][y] != 0
-
-    def get_marble(self, (x, y)):
-        return self.board[x][y]
-
-    def get_inbetween_move(self, (fromx, fromy), (tox, toy)):
-        x = fromx
-        y = fromy
-        if fromx == tox:
-            y = (toy + fromy)/2
-        elif fromy == toy:
-            x = (tox + fromx)/2
-        return (x, y)
-
-    def can_move(self, (fromx, fromy), (tox, toy)):
-        if not self.has_marble((fromx, fromy)):
-            return False
-        if self.has_marble((tox, toy)):
-            return False
-        x, y = self.get_inbetween_move((fromx, fromy), (tox, toy))
-        if not self.has_marble((x, y)):
-            return False
-        return True
-
-    def make_move(self, move):
-        fromx = move.a.x
-        fromy = move.a.y
-        tox = move.b.x
-        toy = move.b.y
-        if not self.can_move((fromx, fromy), (tox, toy)):
-            return False
-        x, y = self.get_inbetween_move((fromx, fromy), (tox, toy))
-        self.remove_marble((fromx, fromy))
-        self.remove_marble((x, y))
-        self.add_marble((tox, toy))
-        return True
-
-    def get_spaces(self):
-        spaces = []
-        for row in range(0, 7):
-            for col in range(0, 7):
-                if self.board[row][col] == 0:
-                    spaces.append((row, col))
-        return spaces
-
-    def get_adjacent_marbles(self, (x, y)):
-        adjacent = []
-        ax = x
-        ay = y + 1
-        if ay <= 6:
-            if self.has_marble((ax, ay)):
-                adjacent.append(self.get_marble((ax, ay)))
-        ay = y - 1
-        if ay >= 0:
-            if self.has_marble((ax, ay)):
-                adjacent.append(self.get_marble((ax, ay)))
-        ax = x + 1
-        ay = y
-        if ax <= 6:
-            if self.has_marble((ax, ay)):
-                adjacent.append(self.get_marble((ax, ay)))
-        ax = x - 1
-        if ax >= 0:
-            if self.has_marble((ax, ay)):
-                adjacent.append(self.get_marble((ax, ay)))
-        return adjacent
-
-    def get_possible_moves(self, space):
-        moves = []
-        for m in self.get_adjacent_marbles(space):
-            for i in self.get_adjacent_marbles((m.x, m.y)):
-                if space[0] == i.x or space[1] == i.y:
-                    moves.append(Move(i, Marble(space[0], space[1])))
-        return moves
-
-    def possible_moves(self):
-        spaces = self.get_spaces()
-        allmoves = []
-        for space in spaces:
-            moves = self.get_possible_moves(space)
-            allmoves.extend(moves)
-        return allmoves
+        pos = self.indexed_positions.get((x,y))
+        if pos:
+            return pos.covered
+        return False
 
     def get_number_marbles(self):
-        total = 0
-        for row in range(0, 7):
-            for col in range(0, 7):
-                if self.board[row][col] is not None and self.board[row][col] != 0:
-                    total = total + 1
-        return total
+        return len(self.positions) - len(self.spaces)
+
+    def possible_moves(self):
+        moves = []
+        for s in self.spaces:
+            if s.left and s.left.covered and s.left.left and \
+                s.left.left.covered:
+                moves.append((s.left.left, s.left, s))
+            if s.right and s.right.covered and s.right.right and \
+                s.right.right.covered:
+                moves.append((s.right.right, s.right, s))
+            if s.up and s.up.covered and s.up.up and s.up.up.covered:
+                moves.append((s.up.up, s.up, s))
+            if s.down and s.down.covered and s.down.down and \
+                s.down.down.covered:
+                moves.append((s.down.down, s.down, s))
+        return moves
+
+    def make_move(self, (marble1, marble2, space)):
+        if marble1.covered and marble2.covered and not space.covered:
+            self.remove_marble_pos(marble1)
+            self.remove_marble_pos(marble2)
+            self.add_marble_pos(space)
+
+    def undo_move(self, (marble1, marble2, space)):
+        if not marble1.covered and not marble2.covered and space.covered:
+            self.remove_marble_pos(space)
+            self.add_marble_pos(marble1)
+            self.add_marble_pos(marble2)
 
     def __repr__(self):
         str = ""
-        for row in range(0, 7):
-            for col in range(0, 7):
-                if self.board[row][col] is None:
-                    str = "%s  " % str
-                elif self.board[row][col] == 0:
-                    str = "%s 0" % str
+        for y in range(0, self.height):
+            row = ""
+            for x in range(0, self.width):
+                pos = self.indexed_positions.get((x,y), None)
+                if pos is None:
+                    row = "%s  " % row
                 else:
-                    str = "%s *" % str
-            str = "%s\n" % str
+                    if pos.covered:
+                        row = "%s *" % row
+                    else:
+                        row = "%s o" % row
+            str = "%s%s\n" % (str, row)
         return str
 
-lowest = 1000
+class RectangleSolitaire(AbstractBoard):
+    def __init__(self, width, height):
+        AbstractBoard.__init__(self, width, height)
+        for x in range(0, width):
+            for y in range(0, height):
+                pos = BoardPosition(x, y, True)
+                self.positions.append(pos)
+                self.indexed_positions[(x,y)] = pos
+        # put in left, right, up, down associations
+        for x in range(0, width):
+            for y in range(0, height):
+                pos = self.indexed_positions[(x, y)]
+                if x > 0:
+                    pos.left = self.indexed_positions[(x - 1, y)]
+                if x < width - 1:
+                    pos.right = self.indexed_positions[(x + 1, y)]
+                if y > 0:
+                    pos.up = self.indexed_positions[(x, y - 1)]
+                if y < height - 1:
+                    pos.down = self.indexed_positions[(x, y + 1)]
 
-def solve(board, allmoves):
-    global lowest
+class EuropeanSolitaire(AbstractBoard):
+    def __init__(self):
+        AbstractBoard.__init__(self, 7, 7)
+        for x in range(0, self.width):
+            for y in range(0, self.height):
+                if (y > 1 and y < 5) or (x > 1 and x < 5) or \
+                    ((y == 1 or y == 5) and (x > 0 and x < 6)) or \
+                    ((x == 1 or x == 5) and (y > 0 and y < 6)):
+                    pos = BoardPosition(x, y, True)
+                    self.positions.append(pos)
+                    self.indexed_positions[(x,y)] = pos
+        # put in left, right, up, down associations
+        for x in range(0, self.width):
+            for y in range(0, self.height):
+                pos = self.indexed_positions.get((x, y))
+                if pos:
+                    pos.left = self.indexed_positions.get((x - 1, y), None)
+                    pos.right = self.indexed_positions.get((x + 1, y), None)
+                    pos.up = self.indexed_positions.get((x, y - 1), None)
+                    pos.down = self.indexed_positions.get((x, y + 1), None)
+
+def solve(board):
     #print "allmoves: %r" % allmoves
-    moves = board.possible_moves()
-    if not moves:
-        marbles = board.get_number_marbles()
-        if lowest > marbles:
-            lowest = marbles
-            print "lowest so far %d" % marbles
-        if marbles == 1:
-            print "Solution: %r" % moves
-        return
-    for m in moves:
-        b = copy.deepcopy(board)
-        b.make_move(m)
-        am = copy.copy(allmoves)
-        am.append(m)
-        solve(b, am)
+    allmoves = []
+    completed_moves = {} # completed moves at depth level level -> [move]
+    lowest = len(board.positions)
+    last_move = None
+    level = 0
+    while True:
+        moves = board.possible_moves()
+        print "moves made so far: %d possible moves: %d level: %d" % (len(allmoves), len(moves), level)
+        m = None
+        while moves:
+            m = moves.pop()
+            if level in completed_moves:
+                there = False
+                for c in completed_moves[level]:
+                    if c == m:
+                        #print "move %r is already made" % (m,)
+                        there = True
+                        break
+                if there:
+                    m = None
+                    continue
+            break
+        #print "move to attempt: %r" % (m,)
+        if not m:
+            marbles = board.get_number_marbles()
+            print "finished with %d left" % marbles
+            if lowest > marbles:
+                lowest = marbles
+                print "lowest so far %d" % marbles
+            if marbles == 1:
+                print "Solution: %r" % allmoves
+                print board
+                break
+            #print "Undoing move: %r" % (last_move,)
+            # undo last move for this dfs
+            board.undo_move(last_move)
+            if level in completed_moves:
+                print "Removing moves made in level %d" % (level,)
+                del completed_moves[level]
+            level = level - 1
+            if len(allmoves) == 0:
+                break
+            allmoves.pop()
+            if len(allmoves) == 0:
+                last_move = None
+            else:
+                last_move = allmoves[-1]
+        else:
+            #print "Considering move %r with completed moves: %r" % (m,completed_moves.get(level, None))
+            board.make_move(m)
+            allmoves.append(m)
+            last_move = m
+            if level in completed_moves:
+                completed_moves[level].append(m)
+            else:
+                completed_moves[level] = [m]
+            level = level + 1
 
-board = Board()
-board.remove_marble((1, 3))
-lowest = board.get_number_marbles()
+#board = Board()
+#board.remove_marble((1, 3))
+#lowest = board.get_number_marbles()
 
-solve(board, [])
-#print board
-#print "num marbles: %d" % board.get_number_marbles()
+sboard = EuropeanSolitaire()
+sboard.remove_marble((3, 1))
+print sboard.has_marble((3, 1))
+print sboard.has_marble((1, 3))
+print sboard
+#print board.possible_moves()
+#print board.get_number_marbles()
+solve(sboard)
